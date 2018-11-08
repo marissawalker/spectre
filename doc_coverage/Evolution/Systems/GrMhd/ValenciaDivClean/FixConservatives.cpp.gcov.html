@@ -1,0 +1,276 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - 5f537f48901286d7e8e7412dbb53956f1d4adb70 - Evolution/Systems/GrMhd/ValenciaDivClean/FixConservatives.cpp</title>
+  <link rel="stylesheet" type="text/css" href="../../../../gcov.css">
+</head>
+
+<body>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="title"> SpECTRE Documentation Coverage Report</td></tr>
+    <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+    <tr>
+      <td width="100%">
+        <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="35%" class="headerValue"><a href="../../../../index.html">top level</a> - <a href="index.html">Evolution/Systems/GrMhd/ValenciaDivClean</a> - FixConservatives.cpp</td>
+            <td width="5%"></td>
+            <td width="15%"></td>
+            <td width="10%" class="headerCovTableHead">Hit</td>
+            <td width="10%" class="headerCovTableHead">Total</td>
+            <td width="15%" class="headerCovTableHead">Coverage</td>
+          </tr>
+          <tr>
+             <td class="headerItem">Commit:</td>
+             <td class="headerValue"><a target="_blank" href="https://github.com/sxs-collaboration/spectre/commit/5f537f48901286d7e8e7412dbb53956f1d4adb70">5f537f48901286d7e8e7412dbb53956f1d4adb70</a></td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntryLo">0.0 %</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Date:</td>
+            <td class="headerValue">2018-11-08 06:45:48</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="headerItem">Legend:</td>
+            <td class="headerValueLeg">            Lines:
+            <span class="coverLegendCov">hit</span>
+            <span class="coverLegendNoCov">not hit</span>
+</td>
+            <td></td>
+          </tr>
+          <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+  </table>
+
+  <table cellpadding=0 cellspacing=0 border=0>
+    <tr>
+      <td><br></td>
+    </tr>
+    <tr>
+      <td>
+<pre class="sourceHeading">          Line data    Source code</pre>
+<pre class="source">
+<span class="lineNum">       1 </span>            : // Distributed under the MIT License.
+<span class="lineNum">       2 </span>            : // See LICENSE.txt for details.
+<span class="lineNum">       3 </span>            : 
+<span class="lineNum">       4 </span>            : #include &quot;Evolution/Systems/GrMhd/ValenciaDivClean/FixConservatives.hpp&quot;
+<span class="lineNum">       5 </span>            : 
+<span class="lineNum">       6 </span>            : #include &lt;algorithm&gt;
+<span class="lineNum">       7 </span>            : #include &lt;cmath&gt;
+<span class="lineNum">       8 </span>            : #include &lt;cstddef&gt;
+<span class="lineNum">       9 </span>            : #include &lt;pup.h&gt;  // IWYU pragma: keep
+<span class="lineNum">      10 </span>            : 
+<span class="lineNum">      11 </span>            : #include &quot;DataStructures/DataVector.hpp&quot;
+<span class="lineNum">      12 </span>            : #include &quot;DataStructures/Tensor/EagerMath/DotProduct.hpp&quot;
+<span class="lineNum">      13 </span>            : #include &quot;DataStructures/Tensor/Tensor.hpp&quot;
+<span class="lineNum">      14 </span>            : #include &quot;NumericalAlgorithms/RootFinding/TOMS748.hpp&quot;
+<span class="lineNum">      15 </span>            : #include &quot;Utilities/ConstantExpressions.hpp&quot;
+<span class="lineNum">      16 </span>            : #include &quot;Utilities/EqualWithinRoundoff.hpp&quot;
+<span class="lineNum">      17 </span>            : 
+<span class="lineNum">      18 </span>            : // IWYU pragma: no_include &lt;array&gt;
+<span class="lineNum">      19 </span>            : // IWYU pragma: no_forward_declare Tensor
+<span class="lineNum">      20 </span>            : 
+<span class="lineNum">      21 </span>            : namespace {
+<span class="lineNum">      22 </span>            : 
+<span class="lineNum">      23 </span>            : class FunctionOfLorentzFactor {
+<span class="lineNum">      24 </span>            :  public:
+<span class="lineNum">      25 </span>            :   FunctionOfLorentzFactor(const double b_squared_over_d,
+<span class="lineNum">      26 </span>            :                           const double tau_over_d,
+<span class="lineNum">      27 </span>            :                           const double normalized_s_dot_b) noexcept
+<span class="lineNum">      28 </span>            :       : b_squared_over_d_(b_squared_over_d),
+<span class="lineNum">      29 </span>            :         tau_over_d_(tau_over_d),
+<span class="lineNum">      30 </span>            :         normalized_s_dot_b_(normalized_s_dot_b) {}
+<span class="lineNum">      31 </span>            : 
+<span class="lineNum">      32 </span>            :   // This function codes Eq. (B.34)
+<span class="lineNum">      33 </span>            :   double operator()(const double lorentz_factor) const noexcept {
+<span class="lineNum">      34 </span>            :     return (lorentz_factor + b_squared_over_d_ - tau_over_d_ - 1.0) *
+<span class="lineNum">      35 </span>            :                (square(lorentz_factor) +
+<span class="lineNum">      36 </span>            :                 b_squared_over_d_ * square(normalized_s_dot_b_) *
+<span class="lineNum">      37 </span>            :                     (b_squared_over_d_ + 2.0 * lorentz_factor)) -
+<span class="lineNum">      38 </span>            :            0.5 * b_squared_over_d_ -
+<span class="lineNum">      39 </span>            :            0.5 * b_squared_over_d_ * square(normalized_s_dot_b_) *
+<span class="lineNum">      40 </span>            :                (square(lorentz_factor) - 1.0 +
+<span class="lineNum">      41 </span>            :                 2.0 * lorentz_factor * b_squared_over_d_ +
+<span class="lineNum">      42 </span>            :                 square(b_squared_over_d_));
+<span class="lineNum">      43 </span>            :   }
+<span class="lineNum">      44 </span>            : 
+<span class="lineNum">      45 </span>            :  private:
+<span class="lineNum">      46 </span>            :   const double b_squared_over_d_;
+<span class="lineNum">      47 </span>            :   const double tau_over_d_;
+<span class="lineNum">      48 </span>            :   const double normalized_s_dot_b_;
+<span class="lineNum">      49 </span>            : };
+<span class="lineNum">      50 </span>            : }  // namespace
+<span class="lineNum">      51 </span>            : 
+<span class="lineNum">      52 </span>            : namespace VariableFixing {
+<span class="lineNum">      53 </span>            : FixConservatives::FixConservatives(
+<span class="lineNum">      54 </span>            :     const double minimum_rest_mass_density_times_lorentz_factor,
+<span class="lineNum">      55 </span>            :     const double safety_factor_for_magnetic_field,
+<span class="lineNum">      56 </span>            :     const double safety_factor_for_momentum_density) noexcept
+<span class="lineNum">      57 </span>            :     : minimum_rest_mass_density_times_lorentz_factor_(
+<span class="lineNum">      58 </span>            :           minimum_rest_mass_density_times_lorentz_factor),
+<span class="lineNum">      59 </span>            :       one_minus_safety_factor_for_magnetic_field_(
+<span class="lineNum">      60 </span>            :           1.0 - safety_factor_for_magnetic_field),
+<span class="lineNum">      61 </span>            :       one_minus_safety_factor_for_momentum_density_(
+<span class="lineNum">      62 </span>            :           1.0 - safety_factor_for_momentum_density) {}
+<span class="lineNum">      63 </span>            : 
+<span class="lineNum">      64 </span>            : // clang-tidy: google-runtime-references
+<span class="lineNum">      65 </span>            : void FixConservatives::pup(PUP::er&amp; p) noexcept {  // NOLINT
+<span class="lineNum">      66 </span>            :   p | minimum_rest_mass_density_times_lorentz_factor_;
+<span class="lineNum">      67 </span>            :   p | one_minus_safety_factor_for_magnetic_field_;
+<span class="lineNum">      68 </span>            :   p | one_minus_safety_factor_for_momentum_density_;
+<span class="lineNum">      69 </span>            : }
+<span class="lineNum">      70 </span>            : 
+<span class="lineNum">      71 </span>            : // WARNING!
+<span class="lineNum">      72 </span>            : // Notation of Foucart is not that of SpECTRE
+<span class="lineNum">      73 </span>            : // SpECTRE           Foucart
+<span class="lineNum">      74 </span>            : // {\tilde D}        \rho_*
+<span class="lineNum">      75 </span>            : // {\tilde \tau}     \tau
+<span class="lineNum">      76 </span>            : // {\tilde S}_k      S_k
+<span class="lineNum">      77 </span>            : // {\tilde B}^k      B^k \sqrt{g}
+<span class="lineNum">      78 </span>            : // \rho              \rho_0
+<span class="lineNum">      79 </span>            : // \gamma_{mn}       g_{mn}
+<span class="lineNum">      80 </span>            : void FixConservatives::operator()(
+<span class="lineNum">      81 </span>            :     const gsl::not_null&lt;Scalar&lt;DataVector&gt;*&gt; tilde_d,
+<span class="lineNum">      82 </span>            :     const gsl::not_null&lt;Scalar&lt;DataVector&gt;*&gt; tilde_tau,
+<span class="lineNum">      83 </span>            :     const gsl::not_null&lt;tnsr::i&lt;DataVector, 3, Frame::Inertial&gt;*&gt; tilde_s,
+<span class="lineNum">      84 </span>            :     const tnsr::I&lt;DataVector, 3, Frame::Inertial&gt;&amp; tilde_b,
+<span class="lineNum">      85 </span>            :     const tnsr::ii&lt;DataVector, 3, Frame::Inertial&gt;&amp; spatial_metric,
+<span class="lineNum">      86 </span>            :     const tnsr::II&lt;DataVector, 3, Frame::Inertial&gt;&amp; inv_spatial_metric,
+<span class="lineNum">      87 </span>            :     const Scalar&lt;DataVector&gt;&amp; sqrt_det_spatial_metric) const noexcept {
+<span class="lineNum">      88 </span>            :   const DataVector rest_mass_density_times_lorentz_factor =
+<span class="lineNum">      89 </span>            :       get(*tilde_d) / get(sqrt_det_spatial_metric);
+<span class="lineNum">      90 </span>            : 
+<span class="lineNum">      91 </span>            :   const DataVector tilde_b_squared =
+<span class="lineNum">      92 </span>            :       get(dot_product(tilde_b, tilde_b, spatial_metric));
+<span class="lineNum">      93 </span>            : 
+<span class="lineNum">      94 </span>            :   const DataVector tilde_s_squared =
+<span class="lineNum">      95 </span>            :       get(dot_product(*tilde_s, *tilde_s, inv_spatial_metric));
+<span class="lineNum">      96 </span>            : 
+<span class="lineNum">      97 </span>            :   const DataVector tilde_s_dot_tilde_b = get(dot_product(*tilde_s, tilde_b));
+<span class="lineNum">      98 </span>            : 
+<span class="lineNum">      99 </span>            :   for (size_t s = 0; s &lt; tilde_b_squared.size(); s++) {
+<span class="lineNum">     100 </span>            :     // Increase density if necessary
+<span class="lineNum">     101 </span>            :     double&amp; d_tilde = get(*tilde_d)[s];
+<span class="lineNum">     102 </span>            :     const double sqrt_det_g = get(sqrt_det_spatial_metric)[s];
+<span class="lineNum">     103 </span>            :     if (rest_mass_density_times_lorentz_factor[s] &lt;
+<span class="lineNum">     104 </span>            :         minimum_rest_mass_density_times_lorentz_factor_) {
+<span class="lineNum">     105 </span>            :       d_tilde = minimum_rest_mass_density_times_lorentz_factor_ * sqrt_det_g;
+<span class="lineNum">     106 </span>            :     }
+<span class="lineNum">     107 </span>            : 
+<span class="lineNum">     108 </span>            :     // Increase internal energy if necessary
+<span class="lineNum">     109 </span>            :     double&amp; tau_tilde = get(*tilde_tau)[s];
+<span class="lineNum">     110 </span>            :     const double b_tilde_squared = tilde_b_squared[s];
+<span class="lineNum">     111 </span>            :     // Equation B.39 of Foucart
+<span class="lineNum">     112 </span>            :     if (b_tilde_squared &gt; one_minus_safety_factor_for_magnetic_field_ * 2. *
+<span class="lineNum">     113 </span>            :                               tau_tilde * sqrt_det_g) {
+<span class="lineNum">     114 </span>            :       tau_tilde = 0.5 * b_tilde_squared /
+<span class="lineNum">     115 </span>            :                   one_minus_safety_factor_for_magnetic_field_ / sqrt_det_g;
+<span class="lineNum">     116 </span>            :     }
+<span class="lineNum">     117 </span>            : 
+<span class="lineNum">     118 </span>            :     // Decrease momentum density if necessary
+<span class="lineNum">     119 </span>            :     const double s_tilde_squared = tilde_s_squared[s];
+<span class="lineNum">     120 </span>            :     // Equation B.24 of Foucart
+<span class="lineNum">     121 </span>            :     const double tau_over_d = tau_tilde / d_tilde;
+<span class="lineNum">     122 </span>            :     // Equation B.23 of Foucart
+<span class="lineNum">     123 </span>            :     const double b_squared_over_d = b_tilde_squared / sqrt_det_g / d_tilde;
+<span class="lineNum">     124 </span>            :     // Equation B.27 of Foucart
+<span class="lineNum">     125 </span>            :     const double normalized_s_dot_b =
+<span class="lineNum">     126 </span>            :         (b_tilde_squared &gt; 1.e-16 * d_tilde and
+<span class="lineNum">     127 </span>            :          s_tilde_squared &gt; 1.e-16 * square(d_tilde))
+<span class="lineNum">     128 </span>            :             ? tilde_s_dot_tilde_b[s] / sqrt(b_tilde_squared * s_tilde_squared)
+<span class="lineNum">     129 </span>            :             : 0.;
+<span class="lineNum">     130 </span>            : 
+<span class="lineNum">     131 </span>            :     // Equation B.40 of Foucart
+<span class="lineNum">     132 </span>            :     const double lower_bound_of_lorentz_factor =
+<span class="lineNum">     133 </span>            :         std::max(1. + tau_over_d - b_squared_over_d, 1.);
+<span class="lineNum">     134 </span>            :     // Equation B.31 of Foucart evaluated at lower bound of lorentz factor
+<span class="lineNum">     135 </span>            :     const double simple_upper_bound_for_s_tilde_squared =
+<span class="lineNum">     136 </span>            :         square(lower_bound_of_lorentz_factor + b_squared_over_d) *
+<span class="lineNum">     137 </span>            :         (square(lower_bound_of_lorentz_factor) - 1.) /
+<span class="lineNum">     138 </span>            :         (square(lower_bound_of_lorentz_factor) +
+<span class="lineNum">     139 </span>            :          square(normalized_s_dot_b) * b_squared_over_d *
+<span class="lineNum">     140 </span>            :              (b_squared_over_d + 2. * lower_bound_of_lorentz_factor)) *
+<span class="lineNum">     141 </span>            :         square(d_tilde);
+<span class="lineNum">     142 </span>            : 
+<span class="lineNum">     143 </span>            :     // If s_tilde_squared is small enough, no fix is needed. Otherwise, we need
+<span class="lineNum">     144 </span>            :     // to do some real work.
+<span class="lineNum">     145 </span>            :     if (s_tilde_squared &gt; one_minus_safety_factor_for_momentum_density_ *
+<span class="lineNum">     146 </span>            :                               simple_upper_bound_for_s_tilde_squared) {
+<span class="lineNum">     147 </span>            :       // Find root of Equation B.34 of Foucart
+<span class="lineNum">     148 </span>            :       // Bounds on root are given by Equation  B.40 of Foucart
+<span class="lineNum">     149 </span>            :       const auto f_of_lorentz_factor = FunctionOfLorentzFactor{
+<span class="lineNum">     150 </span>            :           b_squared_over_d, tau_over_d, normalized_s_dot_b};
+<span class="lineNum">     151 </span>            :       const double upper_bound_of_lorentz_factor = 1.0 + tau_over_d;
+<span class="lineNum">     152 </span>            :       const double lorentz_factor =
+<span class="lineNum">     153 </span>            :           (equal_within_roundoff(lower_bound_of_lorentz_factor,
+<span class="lineNum">     154 </span>            :                                  upper_bound_of_lorentz_factor)
+<span class="lineNum">     155 </span>            :                ? lower_bound_of_lorentz_factor
+<span class="lineNum">     156 </span>            :                :
+<span class="lineNum">     157 </span>            :                // NOLINTNEXTLINE(clang-analyzer-core)
+<span class="lineNum">     158 </span>            :                RootFinder::toms748(
+<span class="lineNum">     159 </span>            :                    f_of_lorentz_factor, lower_bound_of_lorentz_factor,
+<span class="lineNum">     160 </span>            :                    upper_bound_of_lorentz_factor, 1.e-14, 1.e-14, 50));
+<span class="lineNum">     161 </span>            : 
+<span class="lineNum">     162 </span>            :       const double upper_bound_for_s_tilde_squared =
+<span class="lineNum">     163 </span>            :           square(lorentz_factor + b_squared_over_d) *
+<span class="lineNum">     164 </span>            :           (square(lorentz_factor) - 1.) /
+<span class="lineNum">     165 </span>            :           (square(lorentz_factor) +
+<span class="lineNum">     166 </span>            :            square(normalized_s_dot_b) * b_squared_over_d *
+<span class="lineNum">     167 </span>            :                (b_squared_over_d + 2. * lorentz_factor)) *
+<span class="lineNum">     168 </span>            :           square(d_tilde);
+<span class="lineNum">     169 </span>            :       const double rescaling_factor =
+<span class="lineNum">     170 </span>            :           sqrt(one_minus_safety_factor_for_momentum_density_ *
+<span class="lineNum">     171 </span>            :                upper_bound_for_s_tilde_squared /
+<span class="lineNum">     172 </span>            :                (s_tilde_squared + 1.e-16 * square(d_tilde)));
+<span class="lineNum">     173 </span>            :       if (rescaling_factor &lt; 1.) {
+<span class="lineNum">     174 </span>            :         for (size_t i = 0; i &lt; 3; i++) {
+<span class="lineNum">     175 </span>            :           tilde_s-&gt;get(i)[s] *= rescaling_factor;
+<span class="lineNum">     176 </span>            :         }
+<span class="lineNum">     177 </span>            :       }
+<span class="lineNum">     178 </span>            :     }
+<span class="lineNum">     179 </span>            :   }
+<span class="lineNum">     180 </span>            : }
+<span class="lineNum">     181 </span>            : 
+<span class="lineNum">     182 </span><span class="lineNoCov">          0 : bool operator==(const FixConservatives&amp; lhs,</span>
+<span class="lineNum">     183 </span>            :                 const FixConservatives&amp; rhs) noexcept {
+<span class="lineNum">     184 </span>            :   return lhs.minimum_rest_mass_density_times_lorentz_factor_ ==
+<span class="lineNum">     185 </span>            :              rhs.minimum_rest_mass_density_times_lorentz_factor_ and
+<span class="lineNum">     186 </span>            :          lhs.one_minus_safety_factor_for_magnetic_field_ ==
+<span class="lineNum">     187 </span>            :              rhs.one_minus_safety_factor_for_magnetic_field_ and
+<span class="lineNum">     188 </span>            :          lhs.one_minus_safety_factor_for_momentum_density_ ==
+<span class="lineNum">     189 </span>            :              rhs.one_minus_safety_factor_for_momentum_density_;
+<span class="lineNum">     190 </span>            : }
+<span class="lineNum">     191 </span>            : 
+<span class="lineNum">     192 </span><span class="lineNoCov">          0 : bool operator!=(const FixConservatives&amp; lhs,</span>
+<span class="lineNum">     193 </span>            :                 const FixConservatives&amp; rhs) noexcept {
+<span class="lineNum">     194 </span>            :   return not(lhs == rhs);
+<span class="lineNum">     195 </span>            : }
+<span class="lineNum">     196 </span>            : }  // namespace VariableFixing
+</pre>
+      </td>
+    </tr>
+  </table>
+  <br>
+
+  <table width="100%" border=0 cellspacing=0 cellpadding=0>
+    <tr><td class="ruler"><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
+    <tr><td class="versionInfo">Generated by: <a href="http://ltp.sourceforge.net/coverage/lcov.php" target="_parent">LCOV version 1.13</a></td></tr>
+  </table>
+  <br>
+
+</body>
+</html>
